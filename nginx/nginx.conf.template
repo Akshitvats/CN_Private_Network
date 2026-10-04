@@ -1,0 +1,46 @@
+# nginx config template for Mac 2 (Edge / Reverse Proxy / Load Balancer)
+#
+# HOW TO USE:
+#   1. Fill in team/team.env with your team's real IP addresses (run
+#      scripts/get-my-ip.sh on each Mac first).
+#   2. Replace <MAC3_IP>, <MAC4_IP> and teamX below with real values.
+#   3. Copy the result to your Homebrew nginx config location, e.g.
+#      /opt/homebrew/etc/nginx/servers/cn-project.conf
+#      (or paste the "upstream" + "server" blocks into the main nginx.conf
+#      inside the existing http {} block).
+#   4. Restart nginx: sudo brew services restart nginx
+
+upstream backend_pool {
+    server <MAC3_IP>:3001 max_fails=2 fail_timeout=10s;   # Backend A
+    server <MAC3_IP>:3002 max_fails=2 fail_timeout=10s;   # Backend B
+    # default strategy is round-robin; for least-connections instead:
+    # least_conn;
+}
+
+# Plain HTTP - useful for an early sanity check before TLS is set up (Task D)
+server {
+    listen 80;
+    server_name app.teamX.test;
+
+    location / {
+        proxy_pass http://backend_pool;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+
+# HTTPS - enable this block once Task E (mkcert) is done.
+# Use 8443 instead of 443 if your Mac won't let you bind to 443.
+# server {
+#     listen 443 ssl;
+#     server_name app.teamX.test;
+#
+#     ssl_certificate     /path/to/app.teamX.test.pem;
+#     ssl_certificate_key /path/to/app.teamX.test-key.pem;
+#
+#     location / {
+#         proxy_pass http://backend_pool;
+#         proxy_set_header Host $host;
+#         proxy_set_header X-Real-IP $remote_addr;
+#     }
+# }
