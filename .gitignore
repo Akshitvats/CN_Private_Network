@@ -1,0 +1,18 @@
+# Python
+backend/.venv/
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# TLS private keys - NEVER commit
+*.key
+*-key.pem
+rootCA-key.pem
+tls-keys.log
+*.p12
+
+# Per-session IPs (copy from team/team.env.example)
+team/team.env
