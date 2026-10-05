@@ -9,7 +9,7 @@ Collected on **Satyam Kumar's Mac (Mac 1)** on 5 October 2026. Names, enrollment
 | Role | Member | Enrollment | Mac & IP Address | Service / Function |
 | :--- | :--- | :--- | :--- | :--- |
 | **Tech Lead** | **Satyam Kumar** | 2401010428 | **Mac 1** (`10.7.10.50`) | Private DNS Server (`dnsmasq`), Test Client, Wireshark Captures |
-| **Edge / Proxy** | **Krishna Verma** | _TBD_ | **Mac 2** (`10.7.15.125`) | Reverse Proxy & Load Balancer (`nginx`), mkcert CA & TLS (443/80) |
+| **Edge / Proxy** | **Krishna Verma** | 2401010240 | **Mac 2** (`10.7.15.125`) | Reverse Proxy & Load Balancer (`nginx`), mkcert CA & TLS (443/80) |
 | **Backends** | **Akshit Vats** | _TBD_ | **Mac 3** (`10.7.12.174`) | Backend A (`:3001`) & Backend B (`:3002`) (Python Flask) |
 
 - **Private Domain:** `app.teamX.test` and `api.teamX.test`
