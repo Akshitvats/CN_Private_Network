@@ -4,7 +4,7 @@ Collected on **Satyam Kumar's Mac (Mac 1)** on 5 October 2026. Names, enrollment
 
 ---
 
-## 👥 Team & Network Configuration
+## Team & Network Configuration
 
 | Role | Member | Enrollment | Mac & IP Address | Service / Function |
 | :--- | :--- | :--- | :--- | :--- |
@@ -17,7 +17,7 @@ Collected on **Satyam Kumar's Mac (Mac 1)** on 5 October 2026. Names, enrollment
 
 ---
 
-## 🎯 Summary of Verified Results
+## Summary of Verified Results
 
 - **[Full Terminal Output](terminal-output.txt):** Complete raw logs for all tasks (A through G), verifying DNS resolution, round-robin load balancing, trusted HTTPS, HTTP versions, and caching.
 - **[Smoke Test Script](../../scripts/smoke-test.sh):** Automated sanity check verifying DNS, HTTP (5 requests), HTTP headers, HTTPS (5 requests), HTTPS HTTP/2 headers, and conditional cache requests.
@@ -31,7 +31,7 @@ Collected on **Satyam Kumar's Mac (Mac 1)** on 5 October 2026. Names, enrollment
 
 ---
 
-## 📦 Primary Packet Captures
+## Primary Packet Captures
 
 1. **[phase1-capture-en0-lo0.pcapng](phase1-capture-en0-lo0.pcapng)** — Combined multi-interface capture recording DNS queries over loopback/LAN and TCP/TLS handshakes to edge.
 2. **[phase1-capture-en0.pcapng](phase1-capture-en0.pcapng)** — LAN interface capture of real-time client traffic to edge (`10.7.15.125:443`) and DNS server (`10.7.10.50:53`).
@@ -48,7 +48,7 @@ Collected on **Satyam Kumar's Mac (Mac 1)** on 5 October 2026. Names, enrollment
 
 ---
 
-## 📸 Screenshots Overview
+## Screenshots Overview
 
 All screenshots are stored in [screenshots/](screenshots/):
 
