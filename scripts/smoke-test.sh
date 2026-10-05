@@ -1,7 +1,7 @@
 #!/bin/bash
-# Run from any CLIENT Mac once Tasks A-D are done, to sanity-check the
-# whole chain before moving on to TLS (Task E).
-# Usage: ./smoke-test.sh teamX.test
+# Run from any CLIENT Mac once Tasks A-E are done, to sanity-check the
+# whole chain including DNS, HTTP, and TLS/HTTPS.
+# Usage: ./smoke-test.sh [domain] (default: teamX.test)
 set -euo pipefail
 
 DOMAIN="${1:-teamX.test}"
@@ -22,5 +22,25 @@ for i in 1 2 3 4 5; do
 done
 
 echo ""
-echo "== 3. Response headers (Cache-Control, X-Backend) =="
+echo "== 3. HTTP response headers (Cache-Control, X-Backend) =="
 curl --fail --silent --show-error --connect-timeout 3 --max-time 10 --head "http://app.$DOMAIN/api/status"
+
+echo ""
+echo "== 4. HTTPS through the load balancer (5 requests) =="
+for i in 1 2 3 4 5; do
+  curl --fail --silent --show-error --connect-timeout 3 --max-time 10 "https://app.$DOMAIN/api/status"
+  echo ""
+done
+
+echo ""
+echo "== 5. HTTPS response headers (HTTP/2, TLS verification) =="
+curl --fail --silent --show-error --connect-timeout 3 --max-time 10 --head "https://app.$DOMAIN/api/status"
+
+echo ""
+echo "== 6. HTTPS caching & conditional requests =="
+echo "-- Initial Request (/api/cache) --"
+curl --fail --silent --show-error --connect-timeout 3 --max-time 10 --head "https://app.$DOMAIN/api/cache"
+echo ""
+echo "-- Conditional Request with If-None-Match (expect 304) --"
+curl --silent --show-error --connect-timeout 3 --max-time 10 -i -H 'If-None-Match: "cn-cache-v1"' "https://app.$DOMAIN/api/cache" | head -n 10
+

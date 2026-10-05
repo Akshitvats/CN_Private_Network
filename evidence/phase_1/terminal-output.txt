@@ -1,0 +1,299 @@
+=== Task A: Private LAN (Mac 1) ===
+$ ipconfig getifaddr en0
+10.7.10.50
+$ ifconfig en0 | grep -E 'inet |ether'
+	ether 02:00:00:00:00:00
+	inet 10.7.10.50 netmask 0xffffe000 broadcast 10.7.31.255
+$ route -n get default | grep -E 'gateway|interface'
+    gateway: 10.7.0.1
+  interface: en0
+$ ping -c 3 10.7.15.125
+PING 10.7.15.125 (10.7.15.125): 56 data bytes
+64 bytes from 10.7.15.125: icmp_seq=0 ttl=64 time=48.562 ms
+64 bytes from 10.7.15.125: icmp_seq=1 ttl=64 time=70.700 ms
+64 bytes from 10.7.15.125: icmp_seq=2 ttl=64 time=103.837 ms
+
+--- 10.7.15.125 ping statistics ---
+3 packets transmitted, 3 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 48.562/74.366/103.837/22.714 ms
+$ ping -c 3 10.7.12.174
+PING 10.7.12.174 (10.7.12.174): 56 data bytes
+64 bytes from 10.7.12.174: icmp_seq=0 ttl=64 time=75.571 ms
+64 bytes from 10.7.12.174: icmp_seq=1 ttl=64 time=99.398 ms
+64 bytes from 10.7.12.174: icmp_seq=2 ttl=64 time=18.890 ms
+
+--- 10.7.12.174 ping statistics ---
+3 packets transmitted, 3 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 18.890/64.620/99.398/33.767 ms
+=== Task B: Private DNS ===
+$ dig @10.7.10.50 app.teamX.test
+
+; <<>> DiG 9.10.6 <<>> @10.7.10.50 app.teamX.test
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 54343
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;app.teamX.test.			IN	A
+
+;; ANSWER SECTION:
+app.teamX.test.		30	IN	A	10.7.15.125
+
+;; Query time: 16 msec
+;; SERVER: 10.7.10.50#53(10.7.10.50)
+;; WHEN: Mon Oct 05 10:56:34 IST 2026
+;; MSG SIZE  rcvd: 59
+
+$ dig @10.7.10.50 api.teamX.test +short
+10.7.15.125
+$ dig @8.8.8.8 app.teamX.test | grep -E 'status|ANSWER:'
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 25766
+;; flags: qr rd ra ad; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1
+=== Task C: Backends direct ===
+$ curl -si http://10.7.12.174:3001/api/status | grep -E 'HTTP|X-Backend|backend'
+HTTP/1.1 200 OK
+X-Backend: A
+{"backend":"A","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+$ curl -si http://10.7.12.174:3002/api/status | grep -E 'HTTP|X-Backend|backend'
+HTTP/1.1 200 OK
+X-Backend: B
+{"backend":"B","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+=== Task E: HTTPS / TLS (no -k) ===
+$ curl -sv https://app.teamX.test/api/status 2>&1 | grep -E 'Connected|TLSv|ALPN|subject|issuer|verify|HTTP/'
+* Connected to app.teamX.test (10.7.15.125) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (IN), TLS handshake, CERT verify (15):
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+*  subject: O=mkcert development certificate; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  subjectAltName: host "app.teamX.test" matched cert's "app.teamX.test"
+*  issuer: O=mkcert development CA; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma); CN=mkcert krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://app.teamX.test/api/status
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: app.teamX.test]
+* [HTTP/2] [1] [:path: /api/status]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /api/status HTTP/2
+< HTTP/2 200 
+=== Task D: Load balancing (round-robin) ===
+$ for i in 1 2 3 4 5 6; do curl -si https://app.teamX.test/api/status | grep -i x-backend; done
+x-backend: B
+x-backend: A
+x-backend: B
+x-backend: A
+x-backend: B
+x-backend: A
+=== Task F: Caching ===
+$ curl -sI https://app.teamX.test/api/cache
+HTTP/2 200 
+server: nginx/1.31.6
+date: Mon, 05 Oct 2026 05:27:27 GMT
+content-type: application/json
+content-length: 88
+x-backend: B
+etag: "cn-cache-v1"
+cache-control: public, max-age=60
+
+$ curl -si -H 'If-None-Match: "cn-cache-v1"' https://app.teamX.test/api/cache | head -8
+HTTP/2 304 
+server: nginx/1.31.6
+date: Mon, 05 Oct 2026 05:27:27 GMT
+x-backend: A
+etag: "cn-cache-v1"
+cache-control: public, max-age=60
+
+=== Task G: Packet capture traffic (TLS 1.2, ports) ===
+$ dig @10.7.10.50 app.teamX.test +short
+10.7.15.125
+$ curl --tlsv1.2 --tls-max 1.2 -sv https://app.teamX.test/api/status 2>&1 | grep -E 'Trying|Connected|TLSv|HTTP/|X-Backend|backend'
+*   Trying 10.7.15.125:443...
+* Connected to app.teamX.test (10.7.15.125) port 443
+* TLSv1.2 (IN), TLS handshake, Certificate (11):
+* TLSv1.2 (IN), TLS handshake, Server key exchange (12):
+* TLSv1.2 (IN), TLS handshake, Server finished (14):
+* TLSv1.2 (OUT), TLS handshake, Client key exchange (16):
+* TLSv1.2 (OUT), TLS change cipher, Change cipher spec (1):
+* TLSv1.2 (OUT), TLS handshake, Finished (20):
+* TLSv1.2 (IN), TLS change cipher, Change cipher spec (1):
+* TLSv1.2 (IN), TLS handshake, Finished (20):
+* SSL connection using TLSv1.2 / ECDHE-RSA-CHACHA20-POLY1305 / [blank] / UNDEF
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://app.teamX.test/api/status
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: app.teamX.test]
+* [HTTP/2] [1] [:path: /api/status]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /api/status HTTP/2
+< HTTP/2 200 
+< x-backend: B
+{"backend":"B","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+=== Task A: Private LAN (Mac 1) ===
+$ ipconfig getifaddr en0
+10.7.10.50
+$ ifconfig en0 | grep -E 'inet |ether'
+	ether 02:00:00:00:00:00
+	inet 10.7.10.50 netmask 0xffffe000 broadcast 10.7.31.255
+$ route -n get default | grep -E 'gateway|interface'
+    gateway: 10.7.0.1
+  interface: en0
+$ ping -c 3 10.7.15.125
+PING 10.7.15.125 (10.7.15.125): 56 data bytes
+64 bytes from 10.7.15.125: icmp_seq=0 ttl=64 time=54.882 ms
+64 bytes from 10.7.15.125: icmp_seq=1 ttl=64 time=86.544 ms
+64 bytes from 10.7.15.125: icmp_seq=2 ttl=64 time=97.744 ms
+
+--- 10.7.15.125 ping statistics ---
+3 packets transmitted, 3 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 54.882/79.723/97.744/18.151 ms
+$ ping -c 3 10.7.12.174
+PING 10.7.12.174 (10.7.12.174): 56 data bytes
+64 bytes from 10.7.12.174: icmp_seq=0 ttl=32 time=816.192 ms
+64 bytes from 10.7.12.174: icmp_seq=1 ttl=32 time=747.919 ms
+64 bytes from 10.7.12.174: icmp_seq=2 ttl=32 time=657.544 ms
+
+--- 10.7.12.174 ping statistics ---
+3 packets transmitted, 3 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 657.544/740.552/816.192/64.977 ms
+=== Task B: Private DNS ===
+$ dig @10.7.10.50 app.teamX.test
+
+; <<>> DiG 9.10.6 <<>> @10.7.10.50 app.teamX.test
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 52038
+;; flags: qr aa rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 1232
+;; QUESTION SECTION:
+;app.teamX.test.			IN	A
+
+;; ANSWER SECTION:
+app.teamX.test.		30	IN	A	10.7.15.125
+
+;; Query time: 7 msec
+;; SERVER: 10.7.10.50#53(10.7.10.50)
+;; WHEN: Mon Oct 05 10:59:06 IST 2026
+;; MSG SIZE  rcvd: 59
+
+$ dig @10.7.10.50 api.teamX.test +short
+10.7.15.125
+$ dig @8.8.8.8 app.teamX.test | grep -E 'status|ANSWER:'
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 21161
+;; flags: qr rd ra ad; QUERY: 1, ANSWER: 0, AUTHORITY: 1, ADDITIONAL: 1
+=== Task C: Backends direct ===
+$ curl -si http://10.7.12.174:3001/api/status | grep -E 'HTTP|X-Backend|backend'
+HTTP/1.1 200 OK
+X-Backend: A
+{"backend":"A","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+$ curl -si http://10.7.12.174:3002/api/status | grep -E 'HTTP|X-Backend|backend'
+HTTP/1.1 200 OK
+X-Backend: B
+{"backend":"B","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+=== Task E: HTTPS / TLS (no -k) ===
+$ curl -sv https://app.teamX.test/api/status 2>&1 | grep -E 'Connected|TLSv|ALPN|subject|issuer|verify|HTTP/'
+* Connected to app.teamX.test (10.7.15.125) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (IN), TLS handshake, CERT verify (15):
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+*  subject: O=mkcert development certificate; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  subjectAltName: host "app.teamX.test" matched cert's "app.teamX.test"
+*  issuer: O=mkcert development CA; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma); CN=mkcert krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://app.teamX.test/api/status
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: app.teamX.test]
+* [HTTP/2] [1] [:path: /api/status]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /api/status HTTP/2
+< HTTP/2 200 
+=== Task D: Load balancing (round-robin) ===
+$ for i in 1 2 3 4 5 6; do curl -si https://app.teamX.test/api/status | grep -i x-backend; done
+x-backend: B
+x-backend: A
+x-backend: B
+x-backend: A
+x-backend: B
+x-backend: A
+=== Task F: Caching ===
+$ curl -sI https://app.teamX.test/api/cache
+HTTP/2 200 
+server: nginx/1.31.6
+date: Mon, 05 Oct 2026 05:30:15 GMT
+content-type: application/json
+content-length: 88
+x-backend: B
+etag: "cn-cache-v1"
+cache-control: public, max-age=60
+
+$ curl -si -H 'If-None-Match: "cn-cache-v1"' https://app.teamX.test/api/cache | head -8
+HTTP/2 304 
+server: nginx/1.31.6
+date: Mon, 05 Oct 2026 05:30:15 GMT
+x-backend: A
+etag: "cn-cache-v1"
+cache-control: public, max-age=60
+
+=== Task G: Packet capture traffic (TLS 1.2, ports) ===
+$ dig @10.7.10.50 app.teamX.test +short
+10.7.15.125
+$ curl --tlsv1.2 --tls-max 1.2 -sv https://app.teamX.test/api/status 2>&1 | grep -E 'Trying|Connected|TLSv|HTTP/|X-Backend|backend'
+*   Trying 10.7.15.125:443...
+* Connected to app.teamX.test (10.7.15.125) port 443
+* TLSv1.2 (IN), TLS handshake, Certificate (11):
+* TLSv1.2 (IN), TLS handshake, Server key exchange (12):
+* TLSv1.2 (IN), TLS handshake, Server finished (14):
+* TLSv1.2 (OUT), TLS handshake, Client key exchange (16):
+* TLSv1.2 (OUT), TLS change cipher, Change cipher spec (1):
+* TLSv1.2 (OUT), TLS handshake, Finished (20):
+* TLSv1.2 (IN), TLS change cipher, Change cipher spec (1):
+* TLSv1.2 (IN), TLS handshake, Finished (20):
+* SSL connection using TLSv1.2 / ECDHE-RSA-CHACHA20-POLY1305 / [blank] / UNDEF
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://app.teamX.test/api/status
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: app.teamX.test]
+* [HTTP/2] [1] [:path: /api/status]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /api/status HTTP/2
+< HTTP/2 200 
+< x-backend: B
+{"backend":"B","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+=== Task E: HTTPS / TLS (no -k) ===
+$ curl -sv https://app.teamX.test/api/status 2>&1 | grep -E 'Connected|TLSv|ALPN|subject|issuer|verify|HTTP/'
+* Connected to app.teamX.test (10.7.15.125) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (IN), TLS handshake, CERT verify (15):
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+*  subject: O=mkcert development certificate; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  subjectAltName: host "app.teamX.test" matched cert's "app.teamX.test"
+*  issuer: O=mkcert development CA; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma); CN=mkcert krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://app.teamX.test/api/status
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: app.teamX.test]
+* [HTTP/2] [1] [:path: /api/status]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /api/status HTTP/2
+< HTTP/2 200 
