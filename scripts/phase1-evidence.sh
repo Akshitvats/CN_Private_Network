@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Phase 1 evidence run (Mac 1). Runs each task's commands in turn and pauses
-# so each screen can be captured. Output is also saved to evidence/phase1/terminal-output.txt
+# so each screen can be captured. Output is also saved to evidence/phase_1/terminal-output.txt
 # Usage: ./scripts/phase1-evidence.sh [pause_seconds] [tasks...]   e.g. ./scripts/phase1-evidence.sh 40 C E
 cd "$(dirname "$0")/.." || exit 1
 source team/team.env
 D=app.${TEAM_DOMAIN}; P=${1:-12}; shift; TASKS="${*:-A B C E D F G}"
-OUT=evidence/phase1/terminal-output.txt; [ $# -eq 0 ] && [ -z "$*" ] ; : >> "$OUT"
+OUT=evidence/phase_1/terminal-output.txt; [ $# -eq 0 ] && [ -z "$*" ] ; : >> "$OUT"
 sec() { clear; echo "=== $1 ==="; echo "=== $1 ===" >> "$OUT"; }
 run() { echo "\$ $*"; echo "\$ $*" >> "$OUT"; eval "$*" 2>&1 | tee -a "$OUT"; echo; }
 hold() { sleep "$P"; }

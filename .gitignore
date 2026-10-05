@@ -16,3 +16,7 @@ tls-keys.log
 
 # Per-session IPs (copy from team/team.env.example)
 team/team.env
+
+# recorder output (large)
+video/out/
+video/video.env
