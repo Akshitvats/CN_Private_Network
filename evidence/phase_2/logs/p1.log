@@ -1,0 +1,109 @@
+# run-tests.sh p1 - client Satyams-Macbook-Pro-2 (10.7.15.19) - Tue Nov 24 23:25:17 IST 2026
+
+==== PHASE 1 REGRESSION  Tue Nov 24 23:25:17 IST 2026 ====
+
+--- [23:25:17] Task A - inventory of each Mac (interface, IPv4, mask, gateway, MAC address)
+mac1(Satyam)$ echo "host=$(hostname -s) if=en0 ip=$(ipconfig getifaddr en0) mask=$(ipconfig getoption en0 subnet_mask) gw=$(ipconfig getoption en0 router) mac=$(ifconfig en0 | awk "/ether/{print \$2}")"
+host=Satyams-Macbook-Pro-2 if=en0 ip=10.7.15.19 mask=255.255.224.0 gw=10.7.0.1 mac=02:00:00:00:00:00
+mac2(Krishna)$ echo "host=$(hostname -s) if=en0 ip=$(ipconfig getifaddr en0) mask=$(ipconfig getoption en0 subnet_mask) gw=$(ipconfig getoption en0 router) mac=$(ifconfig en0 | awk "/ether/{print \$2}")"
+host=Krishnas-MacBook-Pro-9 if=en0 ip=10.7.15.23 mask=255.255.224.0 gw=10.7.0.1 mac=5a:5c:7f:a8:86:6e
+mac3(Akshit)$ echo "host=$(hostname -s) if=en0 ip=$(ipconfig getifaddr en0) mask=$(ipconfig getoption en0 subnet_mask) gw=$(ipconfig getoption en0 router) mac=$(ifconfig en0 | awk "/ether/{print \$2}")"
+host=Akshits-MacBook-Pro-3 if=en0 ip=10.7.15.21 mask=255.255.224.0 gw=10.7.0.1 mac=46:65:96:8b:7b:6c
+
+--- [23:25:19] Task A - ping matrix (every pair)
+mac1(Satyam)$ for h in 10.7.15.23 10.7.15.21; do ping -c 2 -q $h | tail -1 | sed "s#^#$h #"; done
+10.7.15.23 round-trip min/avg/max/stddev = 16.297/21.004/25.710/4.706 ms
+10.7.15.21 round-trip min/avg/max/stddev = 204.642/211.251/217.860/6.609 ms
+mac2(Krishna)$ for h in 10.7.15.19 10.7.15.21; do ping -c 2 -q $h | tail -1 | sed "s#^#$h #"; done
+10.7.15.19 round-trip min/avg/max/stddev = 5.891/58.571/111.250/52.679 ms
+10.7.15.21 round-trip min/avg/max/stddev = 70.012/73.356/76.700/3.344 ms
+mac3(Akshit)$ for h in 10.7.15.19 10.7.15.23; do ping -c 2 -q $h | tail -1 | sed "s#^#$h #"; done
+10.7.15.19 round-trip min/avg/max/stddev = 5.756/23.517/41.278/17.761 ms
+10.7.15.23 round-trip min/avg/max/stddev = 12.474/12.474/12.474/nan ms
+  PASS: Mac 1 reaches Mac 2 and Mac 3
+
+--- [23:25:30] Task B - both resolvers answer the project names (TTL 30)
+$ dig +nocmd @10.7.15.19 app.teamX.test +noall +answer +stats | grep -E 'IN[[:space:]]+A|SERVER'
+app.teamX.test.		30	IN	A	10.7.15.23
+;; SERVER: 10.7.15.19#53(10.7.15.19)
+$ dig @10.7.15.19 api.teamX.test +short
+10.7.15.23
+$ dig +nocmd @10.7.15.23 app.teamX.test +noall +answer +stats | grep -E 'IN[[:space:]]+A|SERVER'
+app.teamX.test.		30	IN	A	10.7.15.23
+;; SERVER: 10.7.15.23#53(10.7.15.23)
+$ dig @10.7.15.23 api.teamX.test +short
+10.7.15.23
+  PASS: primary DNS answers app.teamX.test -> 10.7.15.23
+  PASS: backup DNS answers app.teamX.test -> 10.7.15.23
+$ dig +nocmd @10.7.15.19 nosuchhost.teamX.test +noall +comments | grep status   # authoritative for teamX.test: NXDOMAIN
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 33301
+$ dig +nocmd @8.8.8.8 app.teamX.test +noall +comments | grep status             # the public Internet has never heard of it
+;; ->>HEADER<<- opcode: QUERY, status: NXDOMAIN, id: 3493
+
+--- [23:25:30] Task B - this client's system resolver
+$ networksetup -getdnsservers Wi-Fi | xargs
+10.7.15.19 10.7.15.23
+$ dig +nocmd app.teamX.test +noall +answer +stats | grep -E 'IN[[:space:]]+A|SERVER'
+app.teamX.test.		30	IN	A	10.7.15.23
+;; SERVER: 10.7.15.19#53(10.7.15.19)
+$ dscacheutil -q host -a name app.teamX.test | grep ip_address
+ip_address: 10.7.15.23
+
+--- [23:25:30] Task C - backends reachable on the LAN from the edge (Mac 2), X-Backend header
+mac2(Krishna)$ curl -s -i http://10.7.15.21:3001/api/status | grep -iE '^HTTP|^X-Backend|backend'
+HTTP/1.1 200 OK
+X-Backend: A
+{"backend":"A","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+mac2(Krishna)$ curl -s -i http://10.7.15.21:3002/api/status | grep -iE '^HTTP|^X-Backend|backend'
+HTTP/1.1 200 OK
+X-Backend: B
+{"backend":"B","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+mac3(Akshit)$ lsof -nP -iTCP:3001 -iTCP:3002 -sTCP:LISTEN | awk 'NR>1{print $1, $9}'
+Python *:3001
+Python *:3002
+
+--- [23:25:32] Task D+E - HTTPS by name, certificate verified (no -k), HTTP/2 and HTTP/1.1
+$ curlx -sv https://app.teamX.test/api/status -o /dev/null 2>&1 | grep -E 'Connected to|SSL connection|ALPN|subject:|issuer:|SSL certificate verify|^< HTTP|^< x-'
+* Connected to app.teamX.test (10.7.15.23) port 443
+* ALPN: curl offers h2,http/1.1
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+*  subject: O=mkcert development certificate; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  issuer: O=mkcert development CA; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma); CN=mkcert krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  SSL certificate verify ok.
+< HTTP/2 200 
+< x-backend: B
+< x-edge: edge1-mac2
+$ curlx -s --http1.1 -I https://app.teamX.test/api/status | head -1
+HTTP/1.1 200 OK
+  PASS: TLS verifies without -k
+
+--- [23:25:32] Task D - round robin (8 requests)
+  #1 200 backend=A edge=edge1-mac2
+  #2 200 backend=B edge=edge1-mac2
+  #3 200 backend=A edge=edge1-mac2
+  #4 200 backend=B edge=edge1-mac2
+  #5 200 backend=A edge=edge1-mac2
+  #6 200 backend=B edge=edge1-mac2
+  #7 200 backend=A edge=edge1-mac2
+  #8 200 backend=B edge=edge1-mac2
+  PASS: both backends served requests
+
+--- [23:25:33] Task F - caching: Cache-Control + ETag, then a conditional request -> 304
+$ curlx -sI https://app.teamX.test/api/cache | grep -iE '^HTTP|cache-control|etag|x-backend'
+HTTP/2 200 
+x-backend: A
+etag: "cn-cache-v1"
+cache-control: public, max-age=60
+$ curlx -si -H 'If-None-Match: "cn-cache-v1"' https://app.teamX.test/api/cache | grep -iE '^HTTP|etag|content-length'
+HTTP/2 304 
+etag: "cn-cache-v1"
+  PASS: conditional GET returns 304
+$ curlx -sI https://app.teamX.test/api/status | grep -i cache-control   # the dynamic endpoint is never cached
+cache-control: no-store
+
+--- [23:25:34] Phase 2 hardening - port 80 redirects to HTTPS
+$ curlx -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' http://app.teamX.test/api/status
+301 -> https://app.teamx.test/api/status
+
+RESULT (p1): 6 passed, 0 failed

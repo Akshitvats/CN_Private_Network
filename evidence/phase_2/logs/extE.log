@@ -1,0 +1,52 @@
+# run-tests.sh extE - client Satyams-Macbook-Pro-2 (10.7.15.19) - Tue Nov 24 23:28:09 IST 2026
+
+==== EXTENSION E - DNS-BASED EDGE CUTOVER  Tue Nov 24 23:28:09 IST 2026 ====
+
+--- [23:28:09] Standby edge (Mac 3) runs the same config + certificate; prove it serves before the cutover
+$ curlx -s --resolve app.teamX.test:443:10.7.15.21 -D - https://app.teamX.test/edge-health | grep -iE 'x-edge|edge2'
+x-edge: edge2-mac3
+edge edge2-mac3 ok
+
+--- [23:28:09] Client A (this Mac) primes its cache: it must be on edge1 before we start
+  200 backend=A edge=edge1-mac2
+
+--- [23:28:10] CUTOVER: app.teamX.test -> 10.7.15.21 on both resolvers
+mac1(Satyam)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.21
+[23:28:10 Satyams-Macbook-Pro-2] record app.teamX.test / api.teamX.test -> 10.7.15.21
+[23:28:10 Satyams-Macbook-Pro-2] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+mac2(Krishna)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.21
+[23:28:10 Krishnas-MacBook-Pro-9] record app.teamX.test / api.teamX.test -> 10.7.15.21
+[23:28:10 Krishnas-MacBook-Pro-9] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+
+--- [23:28:10] Client B (Mac 3) - a NEW lookup - goes to the standby immediately
+mac3(Akshit)$ ip=$(dig @10.7.15.19 app.teamX.test +short); echo "fresh lookup: app.teamX.test -> $ip"; curl -s --cacert ~/cn-project/tls/mkcert-rootCA.pem --resolve app.teamX.test:443:$ip -D - -o /dev/null https://app.teamX.test/api/status | grep -iE 'x-edge|x-backend'
+fresh lookup: app.teamX.test -> 10.7.15.21
+x-backend: A
+x-edge: edge2-mac3
+
+--- [23:28:11] Client A (this Mac, cached answer) keeps hitting the OLD edge until the TTL expires
+  t=+01s 200 backend=B edge=edge1-mac2
+  t=+06s 200 backend=A edge=edge1-mac2
+  t=+10s 200 backend=B edge=edge1-mac2
+  t=+14s 200 backend=A edge=edge1-mac2
+  t=+18s 200 backend=B edge=edge1-mac2
+  t=+23s 200 backend=B edge=edge2-mac3
+  PASS: client A moved to edge2 after the TTL
+
+--- [23:28:33] The old edge can now be stopped for maintenance - nobody notices
+mac2(Krishna)$ ~/cn-project/bin/cn.sh edge stop
+[23:28:33 Krishnas-MacBook-Pro-9] nginx STOPPED
+  200 backend=A edge=edge2-mac3
+  PASS: service up with edge1 stopped
+
+--- [23:28:34] Roll back: edge1 up, record back to 10.7.15.23
+mac2(Krishna)$ ~/cn-project/bin/cn.sh edge start
+[23:28:36 Krishnas-MacBook-Pro-9] nginx STARTED (pid 95821, root master)  on :80 and :443
+mac1(Satyam)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.23
+[23:28:36 Satyams-Macbook-Pro-2] record app.teamX.test / api.teamX.test -> 10.7.15.23
+[23:28:36 Satyams-Macbook-Pro-2] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+mac2(Krishna)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.23
+[23:28:37 Krishnas-MacBook-Pro-9] record app.teamX.test / api.teamX.test -> 10.7.15.23
+[23:28:37 Krishnas-MacBook-Pro-9] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+
+RESULT (extE): 2 passed, 0 failed

@@ -1,0 +1,48 @@
+# run-tests.sh extB - client Satyams-Macbook-Pro-2 (10.7.15.19) - Wed Nov 25 00:00:07 IST 2026
+
+==== EXTENSION B - TTL AND CONTROLLED RECORD CHANGE  Wed Nov 25 00:00:07 IST 2026 ====
+
+--- [00:00:07] Record TTL is 30 s (2nd column of the answer)
+$ dig +nocmd @10.7.15.19 app.teamX.test +noall +answer
+app.teamX.test.		30	IN	A	10.7.15.23
+
+--- [00:00:07] Client resolves -> the answer is now cached by this client (mDNSResponder)
+$ dscacheutil -q host -a name app.teamX.test | grep ip_address
+ip_address: 10.7.15.23
+
+--- [00:00:07] Change the record to 10.7.15.21 (Akshit's standby edge) on BOTH resolvers
+mac1(Satyam)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.21
+[00:00:07 Satyams-Macbook-Pro-2] record app.teamX.test / api.teamX.test -> 10.7.15.21
+[00:00:07 Satyams-Macbook-Pro-2] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+mac2(Krishna)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.21
+[00:00:08 app] record app.teamX.test / api.teamX.test -> 10.7.15.21
+[00:00:08 app] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+$ dig +nocmd @10.7.15.19 app.teamX.test +noall +answer   # the authoritative answer changes immediately
+app.teamX.test.		30	IN	A	10.7.15.21
+
+--- [00:00:08] Poll this client every 5 s: cached (old) answer until the TTL expires
+  t=+01s client=10.7.15.23    server=10.7.15.21
+  t=+06s client=10.7.15.23    server=10.7.15.21
+  t=+11s client=10.7.15.23    server=10.7.15.21
+  t=+16s client=10.7.15.23    server=10.7.15.21
+  t=+21s client=10.7.15.23    server=10.7.15.21
+  t=+26s client=10.7.15.21    server=10.7.15.21
+  PASS: client switched to the new IP within TTL + slack
+
+--- [00:00:33] Change it back, then flush the client cache manually -> immediate change
+$ dscacheutil -q host -a name app.teamX.test | grep ip_address   # (re)cache NEW
+ip_address: 10.7.15.21
+mac1(Satyam)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.23
+[00:00:33 Satyams-Macbook-Pro-2] record app.teamX.test / api.teamX.test -> 10.7.15.23
+[00:00:33 Satyams-Macbook-Pro-2] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+mac2(Krishna)$ ~/cn-project/bin/cn.sh dns-record 10.7.15.23
+[00:00:33 app] record app.teamX.test / api.teamX.test -> 10.7.15.23
+[00:00:33 app] dnsmasq RELOADED (SIGHUP: re-read teamX.hosts, cache cleared)
+$ dscacheutil -q host -a name app.teamX.test | grep ip_address   # still NEW: cached
+ip_address: 10.7.15.21
+$ sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+$ dscacheutil -q host -a name app.teamX.test | grep ip_address   # OLD immediately after the flush
+ip_address: 10.7.15.23
+  PASS: flush gives the new answer at once
+
+RESULT (extB): 2 passed, 0 failed

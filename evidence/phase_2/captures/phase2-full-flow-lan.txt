@@ -1,0 +1,60 @@
+# evidence/phase_2/captures/phase2-full-flow-lan.pcapng  (Tue Nov 24 23:37:56 IST 2026)  client 10.7.15.19 on en0
+# Satyam's Mac is the client AND DNS #1, so its query to 10.7.15.19:53 crosses lo0 (src = dst = 10.7.15.19);
+# lo0 and en0 were captured together and merged. Another client's query would cross the LAN the same way.
+
+## DNS (filter: dns.qry.name matches "(?i)teamx\\.test")  frame | src | sport | dst | dport | query | answer | TTL
+1 10.7.15.19 53314 10.7.15.19 53 app.teamX.test  
+2 10.7.15.19 53 10.7.15.19 53314 app.teamX.test 10.7.15.23 30
+
+## TCP 3-way handshakes to the edge (SYN, SYN-ACK, ACK)  frame | stream | src | sport | dst | dport | flags | seq(raw) | ack(raw)
+3 0 10.7.15.19 51572 10.7.15.23 443 ····CE····S· 3233513980 0
+4 0 10.7.15.23 443 10.7.15.19 51572 ·····E·A··S· 2667097046 3233513981
+5 0 10.7.15.19 51572 10.7.15.23 443 ·······A···· 3233513981 2667097047
+7 0 10.7.15.23 443 10.7.15.19 51572 ·······A···· 2667097047 3233513981
+29 1 10.7.15.19 51573 10.7.15.23 443 ····CE····S· 1072950328 0
+30 1 10.7.15.23 443 10.7.15.19 51573 ·····E·A··S· 1565313567 1072950329
+31 1 10.7.15.19 51573 10.7.15.23 443 ·······A···· 1072950329 1565313568
+33 1 10.7.15.23 443 10.7.15.19 51573 ·······A···· 1565313568 1072950329
+
+## TLS handshake (filter: tls.handshake or tls.change_cipher_spec)  frame | stream | src | dst | info | SNI
+6 0 10.7.15.19 10.7.15.23 Client\ Hello\ (SNI=app.teamx.test) app.teamx.test
+9 0 10.7.15.23 10.7.15.19 Server\ Hello,\ Certificate 
+10 0 10.7.15.23 10.7.15.19 Server\ Key\ Exchange,\ Server\ Hello\ Done 
+12 0 10.7.15.19 10.7.15.23 Client\ Key\ Exchange,\ Change\ Cipher\ Spec,\ Encrypted\ Handshake\ Message 
+14 0 10.7.15.23 10.7.15.19 Change\ Cipher\ Spec,\ Encrypted\ Handshake\ Message 
+32 1 10.7.15.19 10.7.15.23 Client\ Hello\ (SNI=app.teamx.test) app.teamx.test
+35 1 10.7.15.23 10.7.15.19 Server\ Hello,\ Change\ Cipher\ Spec,\ Application\ Data,\ Application\ Data 
+38 1 10.7.15.19 10.7.15.23 Change\ Cipher\ Spec 
+
+## Certificate sent by the server in TLS 1.2 (filter: tls.handshake.type==11)  frame | SAN
+9 app.teamX.test,api.teamX.test
+
+## Encrypted application data (filter: tls.app_data), first 6  frame | stream | src | dst | length
+15 0 10.7.15.23 10.7.15.19 133
+17 0 10.7.15.19 10.7.15.23 160
+18 0 10.7.15.19 10.7.15.23 135
+20 0 10.7.15.23 10.7.15.19 96
+22 0 10.7.15.23 10.7.15.19 273
+35 1 10.7.15.23 10.7.15.19 1514
+
+## curl view of the same requests
+* Connected to app.teamX.test (10.7.15.23) port 443
+* ALPN: curl offers h2,http/1.1
+* SSL connection using TLSv1.2 / ECDHE-RSA-CHACHA20-POLY1305 / [blank] / UNDEF
+* ALPN: server accepted h2
+*  subject: O=mkcert development certificate; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  issuer: O=mkcert development CA; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma); CN=mkcert krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  SSL certificate verify ok.
+< HTTP/2 200 
+< x-backend: B
+< x-edge: edge1-mac2
+* Connected to app.teamX.test (10.7.15.23) port 443
+* ALPN: curl offers h2,http/1.1
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+*  subject: O=mkcert development certificate; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  issuer: O=mkcert development CA; OU=krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma); CN=mkcert krishnaverma@Krishnas-MacBook-Pro-9.local (Krishna Verma)
+*  SSL certificate verify ok.
+< HTTP/2 200 
+< x-backend: A
+< x-edge: edge1-mac2

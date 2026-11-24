@@ -1,0 +1,174 @@
+Extension F practice drills - Tue Nov 24 23:31:56 IST 2026 - client Satyams-Macbook-Pro-2 (10.7.15.19)
+Method: diagnose.sh checks L1 network -> L2 DNS -> L3 IP -> L4 TCP -> L5 TLS -> L6 HTTP -> L7 edge->backend and stops at the first failure.
+
+######## DRILL 1: DNS record points to the wrong IP  (23:31:56)
+FAULT INJECTED: app.teamX.test -> 10.7.15.19 (Satyam's Mac, no web server)
+  (waiting 35 s so this client's cached DNS answer expires)
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.19
+  OK    backup  10.7.15.23 (Krishna): app.teamX.test -> 10.7.15.19
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.19
+  WARN  app.teamX.test resolves to 10.7.15.19 (Satyam's Mac), which is NOT an edge (10.7.15.23/10.7.15.21) - wrong record?
+[L3] IP reachability to 10.7.15.19
+  OK    10.7.15.19 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.19:443
+>>> FIRST FAILING LAYER: L2 DNS (wrong record) - seen at L4
+    likely cause: app.teamX.test resolves to 10.7.15.19 (Satyam's Mac), not an edge, and nothing listens on :443 there
+    next step:    fix the record on BOTH resolvers: cn.sh dns-record 10.7.15.23 (then wait the TTL or flush the client cache)
+REVERTED
+  (waiting 35 s so this client's cached DNS answer expires)
+
+######## DRILL 2: Both DNS resolvers down  (23:33:07)
+FAULT INJECTED: dnsmasq stopped on Mac 1 and Mac 2
+  (waiting 35 s so this client's cached DNS answer expires)
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  FAIL  primary 10.7.15.19 (Satyam) gives no answer
+  FAIL  backup  10.7.15.23 (Krishna) gives no answer
+  FAIL  system resolver cannot resolve app.teamX.test
+>>> FIRST FAILING LAYER: L2 DNS (servers)
+    likely cause: dnsmasq is stopped on BOTH resolvers, or the record name is wrong
+    next step:    ssh to Mac 1/2: ~/cn-project/bin/cn.sh dns status; check ~/cn-project/dnsmasq/teamX.hosts
+REVERTED
+
+######## DRILL 3: Edge web server stopped  (23:34:20)
+FAULT INJECTED: nginx stopped on Mac 2 (Krishna)
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.23
+  OK    backup  10.7.15.23 (Krishna): app.teamX.test -> 10.7.15.23
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.23
+  OK    10.7.15.23 is an edge (Krishna's Mac)
+[L3] IP reachability to 10.7.15.23
+  OK    10.7.15.23 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.23:443
+>>> FIRST FAILING LAYER: L4 TCP (refused)
+    likely cause: host is up but nothing listens on :443 - nginx stopped or on another port
+    next step:    on Krishna's Mac: ~/cn-project/bin/cn.sh edge status; lsof -nP -iTCP -sTCP:LISTEN
+REVERTED
+
+######## DRILL 4: Edge listens on the wrong port  (23:34:22)
+FAULT INJECTED: nginx moved from :443 to :8443 on Mac 2
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.23
+  OK    backup  10.7.15.23 (Krishna): app.teamX.test -> 10.7.15.23
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.23
+  OK    10.7.15.23 is an edge (Krishna's Mac)
+[L3] IP reachability to 10.7.15.23
+  OK    10.7.15.23 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.23:443
+>>> FIRST FAILING LAYER: L4 TCP (refused)
+    likely cause: host is up but nothing listens on :443 - nginx stopped or on another port
+    next step:    on Krishna's Mac: ~/cn-project/bin/cn.sh edge status; lsof -nP -iTCP -sTCP:LISTEN
+REVERTED (deployed config re-installed)
+
+######## DRILL 5: Wrong upstream ports in the edge config  (23:34:25)
+FAULT INJECTED: nginx upstreams changed to :3011/:3012
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.23
+  OK    backup  10.7.15.23 (Krishna): app.teamX.test -> 10.7.15.23
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.23
+  OK    10.7.15.23 is an edge (Krishna's Mac)
+[L3] IP reachability to 10.7.15.23
+  OK    10.7.15.23 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.23:443
+  OK    TCP 443 open (3-way handshake completed)
+[L5] TLS handshake + certificate validation
+  OK    handshake OK (New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384); certificate chains to the team CA and matches app.teamX.test
+[L6] HTTP through the edge
+  FAIL  HTTP 502 from edge=edge1-mac2: the edge works, the BACKENDS do not answer it
+>>> FIRST FAILING LAYER: L7 edge -> backend
+    likely cause: both backends down, wrong upstream IP/port in nginx, or the backend firewall blocks the edge
+    next step:    Akshit's Mac: cn.sh backend status; Krishna's Mac: curl http://10.7.15.21:3001/api/status; tail ~/cn-project/logs/nginx-error.log
+REVERTED (deployed config re-installed)
+
+######## DRILL 6: Edge serves the wrong certificate  (23:34:39)
+FAULT INJECTED: nginx given a self-signed cert for wrong.test
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.23
+  OK    backup  10.7.15.23 (Krishna): app.teamX.test -> 10.7.15.23
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.23
+  OK    10.7.15.23 is an edge (Krishna's Mac)
+[L3] IP reachability to 10.7.15.23
+  OK    10.7.15.23 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.23:443
+  OK    TCP 443 open (3-way handshake completed)
+[L5] TLS handshake + certificate validation
+>>> FIRST FAILING LAYER: L5 TLS
+    likely cause: verify error:num=18:self-signed certificate  (wrong/expired cert, name not in SAN, untrusted CA, or plain HTTP on 443)
+    next step:    openssl s_client -connect 10.7.15.23:443 -servername app.teamX.test; check ssl_certificate in ~/cn-project/nginx/cn-project.conf
+REVERTED
+
+######## DRILL 7: Both backends down  (23:34:42)
+FAULT INJECTED: Flask backends A and B stopped on Mac 3 (Akshit)
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.23
+  FAIL  backup  10.7.15.23 (Krishna) gives no answer
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.23
+  OK    10.7.15.23 is an edge (Krishna's Mac)
+[L3] IP reachability to 10.7.15.23
+  OK    10.7.15.23 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.23:443
+  OK    TCP 443 open (3-way handshake completed)
+[L5] TLS handshake + certificate validation
+  OK    handshake OK (New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384); certificate chains to the team CA and matches app.teamX.test
+[L6] HTTP through the edge
+  FAIL  HTTP 502 from edge=edge1-mac2: the edge works, the BACKENDS do not answer it
+>>> FIRST FAILING LAYER: L7 edge -> backend
+    likely cause: both backends down, wrong upstream IP/port in nginx, or the backend firewall blocks the edge
+    next step:    Akshit's Mac: cn.sh backend status; Krishna's Mac: curl http://10.7.15.21:3001/api/status; tail ~/cn-project/logs/nginx-error.log
+REVERTED
+
+######## DRILL 8: One backend down (hidden by failover)  (23:34:58)
+FAULT INJECTED: Backend A stopped on Mac 3
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.23
+  OK    backup  10.7.15.23 (Krishna): app.teamX.test -> 10.7.15.23
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.23
+  OK    10.7.15.23 is an edge (Krishna's Mac)
+[L3] IP reachability to 10.7.15.23
+  OK    10.7.15.23 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.23:443
+  OK    TCP 443 open (3-way handshake completed)
+[L5] TLS handshake + certificate validation
+  OK    handshake OK (New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384); certificate chains to the team CA and matches app.teamX.test
+[L6] HTTP through the edge
+  OK    HTTP 200 from edge=edge1-mac2 backend=B   body: {"backend":"B","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+[L7] Load balancing / backend health (6 requests)
+  WARN  only one backend answers - the other is DOWN or marked failed (the service still works thanks to failover)
+>>> All layers healthy.
+REVERTED
+
+######## FINAL HEALTH CHECK (after nginx fail_timeout)
+[L1] Client network (interface, IP, gateway)
+  OK    en0 has 10.7.15.19, gateway 10.7.0.1
+[L2] DNS - which servers does this client use, and do they answer?
+  OK    primary 10.7.15.19 (Satyam): app.teamX.test -> 10.7.15.23
+  OK    backup  10.7.15.23 (Krishna): app.teamX.test -> 10.7.15.23
+  OK    system resolver (what curl/browsers use): app.teamX.test -> 10.7.15.23
+  OK    10.7.15.23 is an edge (Krishna's Mac)
+[L3] IP reachability to 10.7.15.23
+  OK    10.7.15.23 is reachable (ICMP/TCP)
+[L4] TCP connect to 10.7.15.23:443
+  OK    TCP 443 open (3-way handshake completed)
+[L5] TLS handshake + certificate validation
+  OK    handshake OK (New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384); certificate chains to the team CA and matches app.teamX.test
+[L6] HTTP through the edge
+  OK    HTTP 200 from edge=edge1-mac2 backend=B   body: {"backend":"B","hostname":"Akshits-MacBook-Pro-3.local","status":"ok"}
+[L7] Load balancing / backend health (6 requests)
+  OK    both backends in rotation
+>>> All layers healthy.

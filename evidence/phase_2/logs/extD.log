@@ -1,0 +1,48 @@
+# run-tests.sh extD - client Satyams-Macbook-Pro-2 (10.7.15.19) - Tue Nov 24 23:27:50 IST 2026
+
+==== EXTENSION D - HIGH-AVAILABILITY FAILOVER  Tue Nov 24 23:27:50 IST 2026 ====
+
+--- [23:27:50] Both healthy: round robin
+  #1 200 backend=B edge=edge1-mac2
+  #2 200 backend=B edge=edge1-mac2
+  #3 200 backend=A edge=edge1-mac2
+  #4 200 backend=B edge=edge1-mac2
+
+--- [23:27:50] Stop Backend A
+mac3(Akshit)$ ~/cn-project/bin/cn.sh backend stop A
+[23:27:50 Akshits-MacBook-Pro-3] backend A STOPPED (port 3001 closed)
+  #1 200 backend=B edge=edge1-mac2
+  #2 200 backend=B edge=edge1-mac2
+  #3 200 backend=B edge=edge1-mac2
+  #4 200 backend=B edge=edge1-mac2
+  #5 200 backend=B edge=edge1-mac2
+  #6 200 backend=B edge=edge1-mac2
+  #7 200 backend=B edge=edge1-mac2
+  #8 200 backend=B edge=edge1-mac2
+  PASS: all 8 requests succeeded (served by B)
+mac2(Krishna)$ grep -E 'upstream_status=50[0-9], ' ~/cn-project/logs/nginx-access.log | tail -2
+10.7.15.19 [24/Nov/2026:23:26:30 +0530] "GET /api/status HTTP/2.0" status=502 edge=edge1-mac2 upstream=10.7.15.21:3001, 10.7.15.21:3002 upstream_status=502, 502 rt=0.289, 0.304
+10.7.15.19 [24/Nov/2026:23:27:51 +0530] "GET /api/status HTTP/2.0" status=200 edge=edge1-mac2 upstream=10.7.15.21:3001, 10.7.15.21:3002 upstream_status=502, 200 rt=0.375, 0.152
+mac2(Krishna)$ grep -E 'refused|temporarily disabled' ~/cn-project/logs/nginx-error.log | tail -2 | cut -c1-200
+2026/11/24 23:27:51 [error] 95571#0: *83 kevent() reported that connect() failed (61: Connection refused) while connecting to upstream, client: 10.7.15.19, server: app.teamx.test, request: "GET /api/s
+2026/11/24 23:27:51 [warn] 95571#0: *83 upstream server temporarily disabled while connecting to upstream, client: 10.7.15.19, server: app.teamx.test, request: "GET /api/status HTTP/2.0", upstream: "h
+
+--- [23:27:56] Restart Backend A - after fail_timeout (10 s) nginx retries it and it rejoins
+mac3(Akshit)$ ~/cn-project/bin/cn.sh backend start A
+[23:27:57 Akshits-MacBook-Pro-3] backend A STARTED on 0.0.0.0:3001 (pid 11686)
+  #1 200 backend=B edge=edge1-mac2
+  #2 200 backend=B edge=edge1-mac2
+  #3 200 backend=A edge=edge1-mac2
+  #4 200 backend=B edge=edge1-mac2
+  #5 200 backend=A edge=edge1-mac2
+  #6 200 backend=B edge=edge1-mac2
+  PASS: A is back in rotation
+mac2(Krishna)$ tail -6 ~/cn-project/logs/nginx-access.log | grep -oE 'upstream=[^ ]+ upstream_status=[^ ]+'
+upstream=10.7.15.21:3002 upstream_status=200
+upstream=10.7.15.21:3002 upstream_status=200
+upstream=10.7.15.21:3001 upstream_status=200
+upstream=10.7.15.21:3002 upstream_status=200
+upstream=10.7.15.21:3001 upstream_status=200
+upstream=10.7.15.21:3002 upstream_status=200
+
+RESULT (extD): 2 passed, 0 failed

@@ -1,5 +1,7 @@
 # Phase 1 Live Demo Commands
 
+> **Phase 1 record (Oct 2026).** The IPs below are the Phase 1 DHCP addresses (DNS `10.7.10.50`, edge `10.7.15.125`, backends `10.7.12.174`). For the current addresses see [`team/team.env`](../team/team.env); for the Phase 2 demo use `scripts/demo.sh` and the [Phase 2 runbook](phase2-runbook.md).
+
 Run each command in the designated location as specified. These commands follow the exact evaluation flow for testing and recording video demonstrations.
 
 ---

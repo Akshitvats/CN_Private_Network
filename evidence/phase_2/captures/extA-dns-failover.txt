@@ -1,0 +1,14 @@
+# evidence/phase_2/captures/extA-dns-failover.pcapng  (Tue Nov 24 23:38:42 IST 2026) - primary DNS (10.7.15.19) stopped, backup (10.7.15.23) answers
+frame | time | src | dst | proto | info
+1 0.000000000 10.7.15.19 10.7.15.19 DNS Standard\ query\ 0xf1cb\ A\ app.teamX.test\ OPT
+2 0.000038000 10.7.15.19,10.7.15.19 10.7.15.19,10.7.15.19 ICMP Destination\ unreachable\ (Port\ unreachable)
+3 1.005139000 10.7.15.19 10.7.15.23 DNS Standard\ query\ 0xf1cb\ A\ app.teamX.test\ OPT
+4 1.070193000 10.7.15.23 10.7.15.19 DNS Standard\ query\ response\ 0xf1cb\ A\ app.teamX.test\ A\ 10.7.15.23\ OPT
+5 1.103183000 10.7.15.19 10.7.15.19 DNS Standard\ query\ 0xb246\ AAAA\ app.teamX.test
+6 1.103227000 10.7.15.19,10.7.15.19 10.7.15.19,10.7.15.19 ICMP Destination\ unreachable\ (Port\ unreachable)
+7 2.104599000 10.7.15.19 10.7.15.19 DNS Standard\ query\ 0xb246\ AAAA\ app.teamX.test
+8 2.104646000 10.7.15.19,10.7.15.19 10.7.15.19,10.7.15.19 ICMP Destination\ unreachable\ (Port\ unreachable)
+9 4.190187000 10.7.15.19 10.7.15.23 DNS Standard\ query\ 0xb246\ AAAA\ app.teamX.test
+10 4.244558000 10.7.15.23 10.7.15.19 DNS Standard\ query\ response\ 0xb246\ AAAA\ app.teamX.test
+11 4.247546000 10.7.15.19 10.7.15.23 DNS Standard\ query\ 0x3523\ A\ app.teamX.test
+12 4.258446000 10.7.15.23 10.7.15.19 DNS Standard\ query\ response\ 0x3523\ A\ app.teamX.test\ A\ 10.7.15.23

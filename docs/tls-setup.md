@@ -87,3 +87,19 @@ curl -v https://app.teamX.test/api/status
 - `*  SSL certificate verify ok.`
 - `* Using HTTP2, server supports multiplexing`
 - `< HTTP/2 200`
+
+---
+
+## 5. Phase 2: one certificate, two edges
+
+- The edge certificate is issued by **Krishna's mkcert CA** (`mkcert app.teamX.test api.teamX.test`). Its public CA
+  certificate is committed as [`tls/mkcert-rootCA.pem`](../tls/mkcert-rootCA.pem); the edge certificate (public part)
+  as [`tls/app.teamX.test.crt`](../tls/app.teamX.test.crt). Private keys are never committed.
+- `scripts/deploy.sh` installs the **same certificate and key** on edge1 (Krishna's Mac) and the standby edge2
+  (Akshit's Mac), copying the key host-to-host through a private temp directory. TLS validates the *name* in the SAN,
+  not the IP, so the Extension E DNS cutover is invisible to clients.
+- `scripts/deploy.sh --tls` re-issues the certificate with mkcert on Krishna's Mac (e.g. before it expires on
+  4 Jan 2029) and redistributes it.
+- Clients trust the CA once with `sudo scripts/phase2/client-setup.sh` (it skips the step if already trusted).
+- Check from any client: `openssl s_client -connect app.teamX.test:443 -servername app.teamX.test -CAfile tls/mkcert-rootCA.pem -verify_hostname app.teamX.test`
+  → `Verify return code: 0 (ok)`.

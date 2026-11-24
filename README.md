@@ -1,162 +1,148 @@
 # Private Network Service
 
-A private, secure and load-balanced network platform built across **3 Macs** for the Computer Networks course project.
+A private, secure, load-balanced and **resilient** network platform built across **3 Macs** for the Computer Networks course project.
 
-> 🎥 **Demo Video:** [Watch the Full Project Demonstration (Google Drive)](https://drive.google.com/file/d/1XXsFh4M2UwdjVBopO7DuX3vYdPd1IA-r/view?usp=sharing)
+> *The application stays simple — the network is the project.*
+>
+> 🎥 **Phase 1 demo video:** [Google Drive](https://drive.google.com/file/d/1XXsFh4M2UwdjVBopO7DuX3vYdPd1IA-r/view?usp=sharing)
 
-The platform demonstrates a complete, isolated private request pipeline:
+**Phase 1 — Build & Observe:** private DNS (`dnsmasq`) → trusted HTTPS (TLS 1.3, HTTP/2) at an `nginx` edge → round-robin load balancing across two Flask REST backends → HTTP caching (`Cache-Control`, `ETag`, `304`) → Wireshark evidence of DNS, TCP and TLS.
 
-1. **Private Name Resolution:** clients query a private DNS server (`dnsmasq`) for `app.teamX.test`, which answers with a 30s TTL. The name does not exist on public DNS.
-2. **Secure Transport (TLS):** clients make a trusted HTTPS connection (TLS 1.2 / 1.3 over TCP 443) using a local mkcert certificate authority.
-3. **Reverse Proxy & Load Balancing:** an `nginx` edge terminates TLS, speaks HTTP/2, and distributes requests round-robin across two Python REST backends, with automatic failover.
-4. **Caching & Conditional Requests:** `Cache-Control: public, max-age=60`, `ETag`, and `304 Not Modified`.
-5. **Packet Inspection:** Wireshark captures of DNS, the TCP 3-way handshake and the TLS handshake and records.
+**Phase 2 — Harden & Recover:** backup DNS resolver (Ext A) · 30 s TTL and live record changes (Ext B) · pf firewall so only the edge reaches the backends (Ext C) · health-checked failover with request retry (Ext D) · standby edge + DNS cutover (Ext E) · layer-by-layer troubleshooting tool (Ext F). Everything is generated from one inventory file and deployed over SSH by bash scripts.
 
 ---
 
 ## Project members
 
-| Name              | Enrollment | Mac   | Role & Responsibilities                                                        |
-| ----------------- | ---------- | ----- | ------------------------------------------------------------------------------ |
-| **Satyam Kumar**  | 2401010428 | Mac 1 | **Tech Lead**. Private DNS server (`dnsmasq`), test client, Wireshark captures |
-| **Krishna Verma** | 2401010240 | Mac 2 | Edge reverse proxy: nginx TLS / HTTPS / HTTP/2 load balancer, mkcert CA        |
-| **Akshit Vats**   | 2401020085 | Mac 3 | Backend servers A (port 3001) and B (port 3002), Python Flask REST API         |
+| Name | Enrollment | Mac | Phase 1 | Phase 2 |
+| --- | --- | --- | --- | --- |
+| **Satyam Kumar** (lead) | 2401010428 | Mac 1 | Private DNS (`dnsmasq`), test client, Wireshark | Primary DNS, TTL/record changes (Ext A, B), operator scripts |
+| **Krishna Verma** | 2401010240 | Mac 2 | nginx edge: TLS / HTTP/2 / load balancer, mkcert CA | Backup DNS (Ext A), health checks + failover (Ext D), edge cutover (Ext E) |
+| **Akshit Vats** | 2401020085 | Mac 3 | Backends A (:3001) and B (:3002), Flask | Standby edge (Ext E), backend firewall with pf (Ext C) |
 
----
-
-## Architecture
+## Architecture (Phase 2)
 
 ```mermaid
 flowchart LR
-    subgraph network["Private LAN (college Wi-Fi, 10.7.0.0/16)"]
-        client["Mac 1 - Satyam<br/>Client: curl / dig / browser / Wireshark"]
-        dns["Mac 1 - Satyam<br/>10.7.10.50:53<br/>dnsmasq"]
-        edge["Mac 2 - Krishna<br/>10.7.15.125:443<br/>nginx (TLS 1.3, HTTP/2)"]
-
-        subgraph backends["Mac 3 - Akshit (10.7.12.174)"]
-            appa["Backend A<br/>:3001<br/>Python Flask"]
-            appb["Backend B<br/>:3002<br/>Python Flask"]
-        end
+    client["Client - Satyam's Mac<br/>curl / browser / dig / Wireshark"]
+    dns1["DNS #1 dnsmasq (primary)<br/>Satyam · 10.7.15.19:53"]
+    dns2["DNS #2 dnsmasq (backup)<br/>Krishna · 10.7.15.23:53"]
+    edge1["edge1 nginx (TLS 1.3, HTTP/2)<br/>Krishna · 10.7.15.23:443"]
+    edge2["edge2 nginx (standby)<br/>Akshit · 10.7.15.21:443"]
+    subgraph be["Akshit's Mac · 10.7.15.21 · pf: only edge1 may connect"]
+        a["Backend A :3001"]
+        b["Backend B :3002"]
     end
-
-    client -->|"1. DNS query: UDP 53"| dns
-    dns -.->|"2. app.teamX.test = 10.7.15.125 (TTL 30s)"| client
-    client -->|"3. HTTPS: TCP 443 (TLS 1.2/1.3)"| edge
-    edge -->|"4. HTTP/1.1: TCP 3001 (round robin)"| appa
-    edge -->|"4. HTTP/1.1: TCP 3002 (round robin)"| appb
-
-    classDef core fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#111827;
-    classDef pool fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#111827;
-    class dns,edge,client core;
-    class appa,appb pool;
+    client -- "UDP 53" --> dns1
+    client -. "UDP 53 if DNS #1 is down" .-> dns2
+    client -- "HTTPS TCP 443" --> edge1
+    client -. "after DNS cutover" .-> edge2
+    edge1 -- "HTTP/1.1 round robin" --> a & b
+    edge2 -.-> a & b
 ```
 
----
+## Network inventory (24 Nov 2026 · LAN 10.7.0.0/19 · gateway 10.7.0.1)
 
-## Network Inventory
+| Node | Member | Address | Services |
+| --- | --- | --- | --- |
+| **Mac 1** | Satyam Kumar | `10.7.15.19` | dnsmasq :53 (primary) · test client · operator |
+| **Mac 2** | Krishna Verma | `10.7.15.23` | nginx edge1 :80 → 301, :443 · dnsmasq :53 (backup) |
+| **Mac 3** | Akshit Vats | `10.7.15.21` | Flask A :3001, B :3002 · nginx edge2 :443 (standby) · pf |
 
-| Node                            | Member        | Address & Port           | Service      | Protocol                                 |
-| ------------------------------- | ------------- | ------------------------ | ------------ | ---------------------------------------- |
-| **Mac 1**: Private DNS + client | Satyam Kumar  | `10.7.10.50:53`          | `dnsmasq`    | DNS over UDP/TCP 53                      |
-| **Mac 2**: Edge & load balancer | Krishna Verma | `10.7.15.125:80`, `:443` | `nginx`      | HTTPS (TLS 1.2/1.3, HTTP/2) over TCP 443 |
-| **Mac 3**: Backend A            | Akshit Vats   | `10.7.12.174:3001`       | Python Flask | HTTP/1.1 over TCP                        |
-| **Mac 3**: Backend B            | Akshit Vats   | `10.7.12.174:3002`       | Python Flask | HTTP/1.1 over TCP                        |
-
-> The IPs are DHCP leases on college Wi-Fi and can change between sessions. Each Mac keeps its own `team/team.env` (copied from `team/team.env.example`, not committed).
-> Run `scripts/get-my-ip.sh` on each Mac before every session.
+`app.teamX.test`, `api.teamX.test` → `10.7.15.23`, TTL 30 s. College Wi-Fi uses DHCP, so IPs change: the single
+source of truth is [`team/team.env`](team/team.env) — run `scripts/update-ips.sh mac2=<ip> mac3=<ip> --deploy`.
+Phase 1 addresses (Oct 2026) were `10.7.10.50` / `10.7.15.125` / `10.7.12.174`.
 
 ---
 
-## Repository Structure
+## Quick start (on Satyam's Mac)
+
+```bash
+scripts/get-my-ip.sh                                   # each Mac: current IP (send it to Satyam)
+scripts/update-ips.sh mac2=10.7.15.23 mac3=10.7.15.21  # only if IPs changed (add --deploy to deploy too)
+scripts/deploy.sh                                      # render + push configs to all Macs, start everything
+scripts/smoke-test.sh                                  # DNS -> HTTPS -> load balancing -> caching
+scripts/demo.sh check                                  # health check, layer by layer
+```
+
+One-time per client Mac (needs that Mac's password): `sudo scripts/phase2/client-setup.sh`.
+All one-time admin steps are listed in the [runbook](docs/phase2-runbook.md#2-one-time-admin-steps-need-passwords--already-done-on-24-nov-2026).
+
+## Live demo (`scripts/demo.sh`)
+
+| Command | Shows |
+| --- | --- |
+| `scripts/demo.sh who` | names, IPs, roles + live status of every Mac |
+| `scripts/demo.sh p1` | Phase 1 recap = final-demo steps 2–8 |
+| `scripts/demo.sh A` | backup DNS: stop DNS #1, clients keep resolving via DNS #2 |
+| `scripts/demo.sh B` | TTL: record change, client keeps the cached answer ~30 s, manual flush |
+| `scripts/demo.sh C` | pf firewall: client → backend times out, edge → backend 200, rollback |
+| `scripts/demo.sh D` | stop Backend A: every request still 200 (served by B), A rejoins |
+| `scripts/demo.sh E` | DNS cutover to the standby edge, cached vs fresh clients |
+| `scripts/demo.sh F` | `diagnose.sh`: names the first failing layer |
+| `scripts/demo.sh break` / `answer` / `fix` | practice with a random hidden fault, reveal it, repair everything |
+
+## Tests and evidence
+
+```bash
+scripts/phase2/run-tests.sh all        # Phase 1 regression + failures + Ext A, B, D, E  -> evidence/phase_2/logs/
+scripts/phase2/run-tests.sh extC       # Ext C (asks Akshit's password for pf)
+scripts/phase2/fault-drills.sh         # Ext F: 8 injected faults, each diagnosed
+scripts/phase2/capture.sh flow         # Wireshark capture DNS -> TCP -> TLS -> HTTP (+ failover, cutover, isolation)
+```
+
+Phase 2 evidence index: [evidence/phase_2/](evidence/phase_2/README.md) · Phase 1 evidence: [evidence/phase_1/](evidence/phase_1/README.md)
+
+## Repository layout
 
 ```text
-.
-├── README.md                 # Project overview (this file)
-├── video_demo.md             # Video script: curl commands + Wireshark capture walkthrough
-├── backend/
-│   ├── app.py                # REST endpoints: /, /api/status, /api/cache
-│   └── requirements.txt
-├── nginx/
-│   ├── nginx.conf.template   # Generic template
-│   └── cn-project.conf       # Config used on Mac 2
-├── dnsmasq/
-│   └── dnsmasq.conf.template
-├── tls/
-│   └── mkcert-rootCA.pem     # PUBLIC mkcert CA cert (to trust on client Macs). No private keys.
-├── scripts/
-│   ├── get-my-ip.sh
-│   ├── run-backend.sh
-│   └── smoke-test.sh
-├── team/
-│   ├── team.env.example
-│   └── team.env              # Local only (gitignored): copy of the example with current IPs
-├── docs/                     # Additional docs (architecture, demo commands, TLS setup)
-└── evidence/                 # Wireshark captures and screenshots
+team/team.env                    inventory: every IP / user / role (single source of truth)
+backend/app.py                   Flask REST backend (/, /api/status, /api/cache) - same file runs as A and B
+dnsmasq/dnsmasq.conf.template    Phase 2 DNS config (rendered for Mac 1 and Mac 2)   | phase1-dnsmasq.conf
+nginx/nginx.conf.template        Phase 2 edge site (rendered for edge1 and edge2)     | phase1-cn-project.conf
+nginx/nginx-main.conf.template   self-contained nginx main config (~/cn-project)
+firewall/pf-backend-isolation.conf.template   Ext C pf rules
+config/rendered/                 every config exactly as deployed
+tls/                             team CA certificate (mkcert-rootCA.pem) + edge certificate (no private keys)
+scripts/
+  get-my-ip.sh  update-ips.sh  render-configs.sh  deploy.sh  smoke-test.sh  diagnose.sh  demo.sh
+  run-backend.sh  phase1-evidence.sh                 (Phase 1)
+  lib/common.sh                  SSH / inventory helpers
+  phase2/cn.sh                   per-Mac service control (dns, dns-record, edge, backend)
+  phase2/client-setup.sh         client DNS (primary + backup) + CA trust (sudo)
+  phase2/firewall.sh             pf apply / status / rollback (sudo, Akshit's Mac)
+  phase2/edge-root.sh            root mode for edge1 (macOS Local Network privacy)
+  phase2/run-tests.sh  fault-drills.sh  capture.sh   evidence generators
+docs/                            architecture, Phase 2 runbook + report, viva prep, TLS setup, Phase 1 demo commands
+evidence/phase_1, phase_2        captures, logs, screenshots
 ```
 
----
+Every script is bash (no Python scripting); the only Python is the backend application itself.
 
-## Quick Start
+## Phase 1 verified results (Oct 2026)
 
-Start the services on each Mac:
+| Test | Result |
+| --- | --- |
+| Private DNS | `app.teamX.test → 10.7.15.125`, TTL 30; `NXDOMAIN` on 8.8.8.8 |
+| Trusted HTTPS | TLS 1.3, ALPN `h2`, issuer mkcert CA, `SSL certificate verify ok`, `HTTP/2 200` |
+| HTTP versions | `HTTP/1.1 200 OK` and `HTTP/2 200` |
+| Load balancing | requests alternate between backends B, A, B, A, … |
+| Caching | `ETag: "cn-cache-v1"`, `Cache-Control: public, max-age=60`, conditional GET → `304` |
+| Failover | Backend A stopped → 8/8 requests served by B with no errors |
 
-```bash
-# Mac 3 (backends): two terminals
-./scripts/run-backend.sh A
-./scripts/run-backend.sh B
+Phase 2 results: see the [Phase 2 report](docs/phase2-report.md).
 
-# Mac 2 (edge)
-sudo nginx -t && sudo brew services restart nginx
+## Notes & lessons learned
 
-# Mac 1 (DNS)
-sudo brew services restart dnsmasq
-```
-
-## Quick Verification (from Mac 1)
-
-```bash
-# 1. Private DNS
-dig @10.7.10.50 app.teamX.test          # A 10.7.15.125, TTL 30
-dig @8.8.8.8   app.teamX.test           # NXDOMAIN (private only)
-
-# 2. Backends directly
-curl -i http://10.7.12.174:3001/api/status   # X-Backend: A
-curl -i http://10.7.12.174:3002/api/status   # X-Backend: B
-
-# 3. Trusted HTTPS through the edge (no -k)
-curl -v https://app.teamX.test/api/status    # TLSv1.3, h2, "SSL certificate verify ok"
-curl --http1.1 -I https://app.teamX.test/api/status
-curl --http2   -I https://app.teamX.test/api/status
-
-# 4. Round-robin load balancing
-for i in 1 2 3 4 5 6; do curl -s https://app.teamX.test/api/status; echo; done
-
-# 5. Caching & ETag
-curl -I https://app.teamX.test/api/cache
-curl -i -H 'If-None-Match: "cn-cache-v1"' https://app.teamX.test/api/cache   # 304
-```
-
-## Verified Results
-
-| Test           | Result                                                                              |
-| -------------- | ----------------------------------------------------------------------------------- |
-| Private DNS    | `app.teamX.test → 10.7.15.125`, TTL 30; `NXDOMAIN` on 8.8.8.8                       |
-| Trusted HTTPS  | TLS 1.3, ALPN `h2`, issuer mkcert CA, `SSL certificate verify ok`, `HTTP/2 200`     |
-| HTTP versions  | `HTTP/1.1 200 OK` and `HTTP/2 200`                                                  |
-| Load balancing | Requests alternate between backends B, A, B, A, …                                   |
-| Caching        | `ETag: "cn-cache-v1"`, `Cache-Control: public, max-age=60`, conditional GET → `304` |
-| Failover       | Backend A stopped → 8/8 requests served by B with no errors                         |
-
----
-
-## Notes & Lessons Learned
-
-- **Managed (college) Macs:** the firewall is enforced by MDM and can't be changed. It still allows incoming connections to signed software: the python.org Python (signed by the PSF), and dnsmasq/nginx worked as well. No firewall changes were needed.
-- **DHCP IP changes:** Mac 3 moved from `.172` to `.174` mid-setup, which caused `504 Gateway Time-out` on nginx. Always re-check IPs.
-- **DNS on the client:** `/etc/resolver/teamX.test` sends only `*.teamX.test` to the private DNS, so normal internet access keeps working.
+- **DHCP IP changes:** Mac 3 moved from `.172` to `.174` in Phase 1 (→ `504`). In Phase 2 every IP lives in `team/team.env` and `update-ips.sh` verifies each Mac over SSH before anything is rendered.
+- **Stale services:** the Phase 1 nginx (root, `sudo brew services`) was still running on Krishna's Mac a month later, holding :80/:443 and proxying to Mac 3's *old* IP → 502. `diagnose.sh` pointed straight at "L7 edge → backend".
+- **macOS Local Network privacy:** a non-Apple daemon started over SSH loses LAN access when the SSH session closes (`connect() … (65: No route to host)`). Root processes are exempt, so edge1 runs as root via a narrowly-scoped helper ([why](docs/architecture.md#why-edge1-runs-as-root-macos-local-network-privacy)).
+- **Client DNS:** Phase 1 used `/etc/resolver/teamX.test → 127.0.0.1`, which bypasses any backup resolver. Phase 2 clients list both resolvers in Wi-Fi DNS (`client-setup.sh`); dnsmasq forwards other names upstream so normal Internet keeps working.
 
 ## Documentation
 
-- [Project Demo Video (Google Drive)](https://drive.google.com/file/d/1XXsFh4M2UwdjVBopO7DuX3vYdPd1IA-r/view?usp=sharing)
-- [TLS & Keychain Trust Guide](docs/tls-setup.md)
-- [Demonstration Commands](docs/demo-commands.md)
+- [Infrastructure Setup](docs/infra-setup.md) — from scratch: installs, SSH keys, CA, first deploy, one-time sudo steps, common errors, teardown
+- [Phase 2 Runbook](docs/phase2-runbook.md) — session start, one-time admin steps, final demo sequence (§8 steps 1–11), rollback
+- [Phase 2 Report](docs/phase2-report.md) — what changed, test results, troubleshooting findings, learning summary
+- [Architecture](docs/architecture.md) — topology, IP/service table, request flow, layer map, cloud equivalents, SPOFs
+- [Viva prep](docs/viva-prep.md) · [TLS setup](docs/tls-setup.md) · [Phase 1 demo commands](docs/demo-commands.md)

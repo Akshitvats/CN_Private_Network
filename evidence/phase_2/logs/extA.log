@@ -1,0 +1,65 @@
+# run-tests.sh extA - client Satyams-Macbook-Pro-2 (10.7.15.19) - Tue Nov 24 23:42:53 IST 2026
+
+==== EXTENSION A - BACKUP DNS RESOLVER  Tue Nov 24 23:42:53 IST 2026 ====
+
+--- [23:42:53] Client resolver list (both servers) and both resolvers up
+$ networksetup -getdnsservers Wi-Fi | xargs
+10.7.15.19 10.7.15.23
+$ scutil --dns | awk '/resolver #1/,/^$/' | grep nameserver
+  nameserver[0] : 10.7.15.19
+  nameserver[1] : 10.7.15.23
+  nameserver[0] : 10.7.15.19
+  nameserver[1] : 10.7.15.23
+mac1(Satyam)$ ~/cn-project/bin/cn.sh dns status
+[23:42:53 Satyams-Macbook-Pro-2] dnsmasq UP   (pid 61806)  records: 10.7.15.23 app.teamX.test api.teamX.test
+mac2(Krishna)$ ~/cn-project/bin/cn.sh dns status
+[23:42:56 Krishnas-MacBook-Pro-9] dnsmasq UP   (pid 96211)  records: 10.7.15.23 app.teamX.test api.teamX.test
+$ dig +nocmd app.teamX.test +noall +answer +stats | grep -E 'IN[[:space:]]+A|SERVER'
+app.teamX.test.		30	IN	A	10.7.15.23
+;; SERVER: 10.7.15.19#53(10.7.15.19)
+
+--- [23:42:56] Stop the PRIMARY (dnsmasq on Mac 1)
+mac1(Satyam)$ ~/cn-project/bin/cn.sh dns stop
+[23:42:56 Satyams-Macbook-Pro-2] dnsmasq STOPPED
+$ dig @10.7.15.19 app.teamX.test +time=2 +tries=1 | grep -E 'refused|timed out|status|no servers'
+;; connection timed out; no servers could be reached
+
+--- [23:42:58] The backup resolver has the same records
+$ dig +nocmd @10.7.15.23 app.teamX.test +noall +answer +stats | grep -E 'IN[[:space:]]+A|SERVER'
+app.teamX.test.		30	IN	A	10.7.15.23
+;; SERVER: 10.7.15.23#53(10.7.15.23)
+
+--- [23:42:58] System resolver (curl/browsers): wait for the cached entry to expire, then resolve again
+$ dig +nocmd app.teamX.test +noall +answer +stats | grep -E 'IN[[:space:]]+A|SERVER'
+app.teamX.test.		30	IN	A	10.7.15.23
+;; SERVER: 10.7.15.23#53(10.7.15.23)
+$ dscacheutil -q host -a name app.teamX.test | grep ip_address
+ip_address: 10.7.15.23
+  HTTPS while the primary is down: 200 backend=A edge=edge1-mac2
+  PASS: client still resolves with the primary down
+  PASS: HTTPS still 200 with the primary down
+mac2(Krishna)$ grep -i 'query\[A\] app.teamX.test' ~/cn-project/logs/dnsmasq.log | tail -3   # the BACKUP served the client
+Nov 24 23:42:58 dnsmasq[96211]: query[A] app.teamx.test from 10.7.15.19
+Nov 24 23:43:31 dnsmasq[96211]: query[A] app.teamx.test from 10.7.15.19
+Nov 24 23:43:31 dnsmasq[96211]: query[A] app.teamx.test from 10.7.15.19
+
+--- [23:43:33] DNS failure vs application failure
+$ dig @10.7.15.23 app.teamX.test +short   # name resolution works ...
+10.7.15.23
+mac3(Akshit)$ ~/cn-project/bin/cn.sh backend stop
+[23:43:39 Akshits-MacBook-Pro-3] backend A STOPPED (port 3001 closed)
+[23:43:39 Akshits-MacBook-Pro-3] backend B STOPPED (port 3002 closed)
+$ curl -s -o /dev/null -w 'HTTP %{http_code}\n' https://app.teamX.test/api/status   # ... but the application is down (502)
+HTTP 502
+mac3(Akshit)$ ~/cn-project/bin/cn.sh backend start
+[23:43:41 Akshits-MacBook-Pro-3] backend A STARTED on 0.0.0.0:3001 (pid 12431)
+[23:43:42 Akshits-MacBook-Pro-3] backend B STARTED on 0.0.0.0:3002 (pid 12454)
+
+--- [23:43:42] Restore the primary
+mac1(Satyam)$ ~/cn-project/bin/cn.sh dns start
+[23:43:42 Satyams-Macbook-Pro-2] dnsmasq STARTED (pid 64483) on udp/tcp 0.0.0.0:53
+$ dig +nocmd app.teamX.test +noall +answer +stats | grep -E 'IN[[:space:]]+A|SERVER'
+app.teamX.test.		30	IN	A	10.7.15.23
+;; SERVER: 10.7.15.19#53(10.7.15.19)
+
+RESULT (extA): 2 passed, 0 failed

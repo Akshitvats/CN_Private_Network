@@ -7,19 +7,20 @@ __pycache__/
 # macOS
 .DS_Store
 
-# TLS private keys - NEVER commit
+# TLS private keys - NEVER commit (the edge key is copied host-to-host by deploy.sh)
 *.key
 *-key.pem
 rootCA-key.pem
 tls-keys.log
 *.p12
 
-# Per-session IPs (copy from team/team.env.example)
-team/team.env
+# Local machine state written by the helper scripts
+config/client-state/
+config/firewall-state/
+config/.demo-fault
 
 # recorder output (large)
 video/out/
 video/video.env
 video_demo.md
 video_script_phase1.md
-

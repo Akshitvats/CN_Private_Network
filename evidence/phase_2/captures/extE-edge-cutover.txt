@@ -1,0 +1,12 @@
+# evidence/phase_2/captures/extE-edge-cutover.pcapng  (Tue Nov 24 23:39:51 IST 2026) - before: answer 10.7.15.23 -> TLS to edge1; after cutover: answer 10.7.15.21 -> TLS to edge2
+frame | time | src | dst | info
+1 0.000000000 10.7.15.19 10.7.15.23 51577\ →\ 443\ [SYN,\ ECE,\ CWR]\ Seq=0\ Win=65535\ Len=0\ MSS=1460\ WS=64\ TSval=1550599263\ TSecr=0\ SACK_PERM
+2 0.086127000 10.7.15.19 10.7.15.23 [TCP\ Retransmission]\ 51577\ →\ 443\ [SYN]\ Seq=0\ Win=65535\ Len=0\ MSS=1460\ WS=64\ TSval=1550599349\ TSecr=0\ SACK_PERM
+3 0.090267000 10.7.15.23 10.7.15.19 443\ →\ 51577\ [SYN,\ ACK,\ ECE]\ Seq=0\ Ack=1\ Win=65535\ Len=0\ MSS=1460\ WS=64\ TSval=757282778\ TSecr=1550599263\ SACK_PERM
+5 0.091914000 10.7.15.23 10.7.15.19 [TCP\ Out-Of-Order]\ 443\ →\ 51577\ [SYN,\ ACK]\ Seq=0\ Ack=1\ Win=65535\ Len=0\ MSS=1460\ WS=64\ TSval=757282780\ TSecr=1550599349\ SACK_PERM
+7 0.092238000 10.7.15.19 10.7.15.23 Client\ Hello\ (SNI=app.teamx.test)
+37 32.739893000 10.7.15.19 10.7.15.19 Standard\ query\ 0x626e\ A\ app.teamX.test
+38 32.761103000 10.7.15.19 10.7.15.19 Standard\ query\ response\ 0x626e\ A\ app.teamX.test\ A\ 10.7.15.21
+39 32.765191000 10.7.15.19 10.7.15.21 51580\ →\ 443\ [SYN,\ ECE,\ CWR]\ Seq=0\ Win=65535\ Len=0\ MSS=1460\ WS=64\ TSval=3780138692\ TSecr=0\ SACK_PERM
+40 32.773940000 10.7.15.21 10.7.15.19 443\ →\ 51580\ [SYN,\ ACK,\ ECE]\ Seq=0\ Ack=1\ Win=65535\ Len=0\ MSS=1460\ WS=64\ TSval=2877740439\ TSecr=3780138692\ SACK_PERM
+42 32.775115000 10.7.15.19 10.7.15.21 Client\ Hello\ (SNI=app.teamx.test)

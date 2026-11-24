@@ -1,0 +1,61 @@
+# run-tests.sh extC - client Satyams-Macbook-Pro-2 (10.7.15.19) - Wed Nov 25 00:00:34 IST 2026
+
+==== EXTENSION C - SERVICE ISOLATION (pf on Akshit's Mac)  Wed Nov 25 00:00:34 IST 2026 ====
+
+--- [00:00:34] BEFORE: a client (Mac 1) can reach the backends directly
+$ curl -s -m 4 -o /dev/null -w 'client -> A: %{http_code}\n' http://10.7.15.21:3001/api/status
+client -> A: 000
+
+--- [00:00:38] Apply the firewall on Mac 3 (sudo - Akshit's password)
+$ grep -vE '^[[:space:]]*(#|$)' /Users/satyamkumar/Desktop/CN_Project/CN_Private_Network/config/rendered/mac3/pf-backend-isolation.conf
+backend_ports = "{ 3001, 3002 }"
+edge_hosts    = "{ 10.7.15.23 }"
+pass in quick on lo0 all
+pass in quick proto tcp from $edge_hosts to any port $backend_ports
+block drop in quick proto tcp from any to any port $backend_ports
+Password:
+pfctl: Use of -f option, could result in flushing of rules
+present in the main ruleset added by the system at startup.
+See /etc/pf.conf for further details.
+present in the main ruleset added by the system at startup.
+See /etc/pf.conf for further details.
+APPLIED: 5 rules in anchor com.apple/cn-backend-isolation  (pf Enabled)
+pass in quick on lo0 all flags S/SA keep state
+pass in quick inet proto tcp from 10.7.15.23 to any port = 3001 flags S/SA keep state
+pass in quick inet proto tcp from 10.7.15.23 to any port = 3002 flags S/SA keep state
+block drop in quick proto tcp from any to any port = 3001
+block drop in quick proto tcp from any to any port = 3002
+
+--- [00:03:12] Edge (Mac 2) -> backends: allowed
+mac2(Krishna)$ curl -s -m 4 -o /dev/null -w 'edge -> A: %{http_code}\n' http://10.7.15.21:3001/api/status; curl -s -m 4 -o /dev/null -w 'edge -> B: %{http_code}\n' http://10.7.15.21:3002/api/status
+edge -> A: 200
+edge -> B: 200
+
+--- [00:03:13] Client (Mac 1) -> backends directly: blocked (SYN dropped -> timeout, exit 28)
+$ curl -s -m 4 -o /dev/null http://10.7.15.21:3001/api/status; echo "client -> A exit=$?"
+client -> A exit=28
+$ nc -z -G 3 10.7.15.21 3002; echo "client -> B nc exit=$?"
+client -> B nc exit=1
+  PASS: edge reaches backend A
+  PASS: client blocked from backend A
+  PASS: client blocked from backend B
+
+--- [00:03:27] Packet capture while the firewall is on (client side: SYNs retransmitted, never answered)
+client -> A exit=28 (28 = timeout: dropped by pf)
+# evidence/phase_2/captures/extC-isolation-client-side.pcapng  (Wed Nov 25 00:03:34 IST 2026) - client SYNs to 10.7.15.21:3001 retransmitted, never answered
+frame | time | src | sport | dst | dport | flags
+1 0.000000000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+2 0.034095000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+3 0.067392000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+4 0.101550000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+5 0.135140000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+6 0.168621000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+7 0.235781000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+8 0.368136000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+9 0.633300000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+10 1.162642000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+11 2.219904000 10.7.15.19 51853 10.7.15.21 3001 ··········S·
+
+--- [00:03:35] Client through the edge: still works
+  200 backend=B edge=edge1-mac2
+  PASS: service via the edge still 200

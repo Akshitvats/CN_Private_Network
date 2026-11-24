@@ -1,0 +1,40 @@
+# nginx MAIN config for the CN project edge (@EDGE_NAME@ on @NODE_IP@).
+#
+# Rendered by scripts/render-configs.sh. cn.sh starts nginx with
+#     nginx -p @CN_HOME@/nginx -c @CN_HOME@/nginx/nginx.conf
+# so the edge is completely self-contained in ~/cn-project: it does not use
+# Homebrew's /opt/homebrew/etc/nginx/nginx.conf, does not need root, and
+# cannot clash with root-owned files left over from "sudo brew services".
+
+# Process user. On the primary edge (Krishna's Mac) nginx runs as ROOT -
+# master AND workers: the workers open the upstream connections to the
+# backends, and macOS Local Network privacy only exempts root processes
+# (see scripts/phase2/edge-root.sh). On the standby edge nginx runs as the
+# normal user (its backends are on its own IP, which is not restricted).
+@USER_LINE@
+
+worker_processes  1;
+pid        @CN_HOME@/run/nginx.pid;
+error_log  @CN_HOME@/logs/nginx-error.log warn;
+
+events {
+    worker_connections  256;
+}
+
+http {
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout  65;
+    # Must be set here too, otherwise nginx opens Homebrew's compiled-in default
+    # (/opt/homebrew/var/log/nginx/access.log), which may be root-owned.
+    access_log  @CN_HOME@/logs/nginx-access.log;
+
+    client_body_temp_path  @CN_HOME@/run/nginx-tmp/client_body;
+    proxy_temp_path        @CN_HOME@/run/nginx-tmp/proxy;
+    fastcgi_temp_path      @CN_HOME@/run/nginx-tmp/fastcgi;
+    uwsgi_temp_path        @CN_HOME@/run/nginx-tmp/uwsgi;
+    scgi_temp_path         @CN_HOME@/run/nginx-tmp/scgi;
+
+    # The project site: upstreams, TLS, load balancing (nginx.conf.template)
+    include  @CN_HOME@/nginx/cn-project.conf;
+}
